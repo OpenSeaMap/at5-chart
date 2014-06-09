@@ -31,7 +31,7 @@ def handleArgs(args):
         if args.all:
             eles = []
         
-        osmfiles.extend(downloadOSM(args.oapi, "./", args.bounds, True, False, True, eles))
+        osmfiles.extend(downloadOSM(args.oapi, "./", args.bounds, True, True, False, eles))
     
     if args.download:
         return (None)

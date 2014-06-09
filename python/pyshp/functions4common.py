@@ -79,7 +79,7 @@ def downloadOSM(oapi, outdir, bounds, verboosity = False, combine = False, mix =
             else:
                 print("Warning: Unknown element '" + elekey + "'!")
     
-    queries = []
+    queries = {'node': {}, 'way': {}, 'area': {}}
     for key in elements:
         if type(all_elements[key][0]) is dict: #no alternate tags (may still have multiple keys/values)
             query = ""
@@ -91,11 +91,9 @@ def downloadOSM(oapi, outdir, bounds, verboosity = False, combine = False, mix =
                     
             if type(all_elements[key][0]['t']) is list: #multiple types
                 for thetype in all_elements[key][0]['t']:
-                    queries.append((thetype if (thetype != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
+                    queries[thetype][key] = queries[thetype].get(key, '') + ((thetype if (thetype != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
             else:
-                queries.append((all_elements[key][0]['t'] if (all_elements[key][0]['t'] != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
-            continue
-                
+                queries[all_elements[key][0]['t']][key] = queries[all_elements[key][0]['t']].get(key, '') + ((all_elements[key][0]['t'] if (all_elements[key][0]['t'] != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
         elif type(all_elements[key][0]) is list: #has alternate tags (see "lake" for example)
             for ind in range(0, len(all_elements[key])):
                 query = ""
@@ -107,32 +105,45 @@ def downloadOSM(oapi, outdir, bounds, verboosity = False, combine = False, mix =
                         
                 if type(all_elements[key][ind][0]['t']) is list: #multiple types
                     for thetype in all_elements[key][ind][0]['t']:
-                        queries.append((thetype if (thetype != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
+                        queries[thetype][key] = queries[thetype].get(key, '') + ((thetype if (thetype != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
                 else:
-                    queries.append((all_elements[key][ind][0]['t'] if (all_elements[key][ind][0]['t'] != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
+                    queries[all_elements[key][ind][0]['t']][key] = queries[all_elements[key][ind][0]['t']].get(key, '') + ((all_elements[key][ind][0]['t'] if (all_elements[key][ind][0]['t'] != "area") else "way") + query + '(' + str(bounds[1]) + ',' + str(bounds[2]) + ',' + str(bounds[0]) + ',' + str(bounds[3]) + ');')
 
     if verboosity:
         print("Downloading elements:")
     
     osmfiles = []
-    osmurl = []
+    osmurl = {}
     
     if combine:
-        osmurl.append(oapi + '?data=[maxsize:1073741824][timeout:900][out:xml];(' + ''.join(queries) + ');(._;>;);out;')
-        #print(osmurl)
-        #overpass.osm.rambler.ru/cgi/interpreter?data=[maxsize:1073741824][timeout:900][out:xml];(node["seamark:type"~"beacon*"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"~"buoy*"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"="wreck"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"="rock"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["seamark:type"="obstruction"]["seamark:obstruction:category"="boom"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["barrier"="fence"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["boundary"="administrative"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="lake"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="lake"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="cove"]["estuary"="yes"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="reservoir"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="river"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["subsea"="coral"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"="gate"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["seamark:type"="gate"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499););(._;>;);out;
+        if mix:
+            cmbmixstr = []
+            for thetype, thelist in queries.items():
+                for thename, theobject in thelist.items():
+                    cmbmixstr.append(theobject)
+            osmurl["combined_mixed"] = (oapi + '?data=[maxsize:1073741824][timeout:900][out:xml];(' + ''.join(cmbmixstr) + ');(._;>;);out;')
+            #print(osmurl)
+            #overpass.osm.rambler.ru/cgi/interpreter?data=[maxsize:1073741824][timeout:900][out:xml];(node["seamark:type"~"beacon*"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"~"buoy*"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"="wreck"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"="rock"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["seamark:type"="obstruction"]["seamark:obstruction:category"="boom"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["barrier"="fence"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["boundary"="administrative"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="lake"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="lake"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="cove"]["estuary"="yes"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="reservoir"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["natural"="water"]["water"="river"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["subsea"="coral"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);node["seamark:type"="gate"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499);way["seamark:type"="gate"](1.0553144713908544,104.315185546875,1.5962442743900633,103.41430664062499););(._;>;);out;
+        else:
+            for thetype, thelist in queries.items():
+                cmbstr = []
+                for thename, theobject in thelist.items():
+                    cmbstr.append(theobject)
+                osmurl["combined_" + thetype] = (oapi + '?data=[maxsize:1073741824][timeout:900][out:xml];(' + ''.join(cmbstr) + ');(._;>;);out;')
     else:
-        for ind in range(0, len(queries)):
-            osmurl.append(oapi + '?data=[maxsize:1073741824][timeout:900][out:xml];(' + queries[ind] + ');(._;>;);out;')
+        for thetype, thelist in queries.items():
+            for thename, theobject in thelist.items():
+                osmurl[thetype + "_" + thename] = (oapi + '?data=[maxsize:1073741824][timeout:900][out:xml];(' + theobject + ');(._;>;);out;')
     
     datetimestamp = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
-    for ind in range(0, len(osmurl)):
-        osmfile = outdir + "/" + "osm2inc_" + str(bounds[1]) + "N_" + str(bounds[3]) + "S_" + str(bounds[0]) + "E_" + str(bounds[2]) + "W-" + datetimestamp + "_" + str(ind) + ".osm"
+    for ind, (thename, theurl) in enumerate(osmurl.items()):
+        osmfile = outdir + "/" + "osm2inc_" + str(bounds[1]) + "N_" + str(bounds[3]) + "S_" + str(bounds[0]) + "E_" + str(bounds[2]) + "W-" + datetimestamp + "_" + thename + ".osm"
+        
         attempts = 1
         while attempts <= 3:
             try:
                 print("- Downloading .osm file " + str(ind+1) + " of " + str(len(osmurl)) + ": " + osmfile)
-                urllib.request.urlretrieve(osmurl[ind], osmfile)
+                urllib.request.urlretrieve(theurl, osmfile)
             except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
                 attempts += 1
                 print ("-- Error while retrieving data! Sleeping for 5 seconds...")
