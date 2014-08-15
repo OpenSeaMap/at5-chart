@@ -91,7 +91,7 @@ all_elements["buoy_special_purpose"] = [{"k": "seamark:type", "v": "buoy_special
 #all_elements["buoy_all"] = [{"k": "seamark:type", "regv": "buoy*", "t": "node"}]
 
 all_elements["gate"] = [{"k": "seamark:type", "v": "gate", "t": ["node", "area"]}]
-all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}]
+all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}] # to add support for an area instead of just node
 all_elements["wreck"] = [{"k": "seamark:type", "v": "wreck", "t": "node"}]
 
 
@@ -343,12 +343,25 @@ def processOSMFiles(thefiles, verboose):
         processOSMFile(file, verboose);
         
     datetimestamp = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
-    w.save("osm2inc_" + datetimestamp + "_combined_nodes.osm")
-    x.save("osm2inc_" + datetimestamp + "_combined_ways.osm")
-    #y.save("osm2inc_" + datetimestamp + "_combined_areas.osm")
+    if len(w._shapes) > 0:
+        w.save("osm2inc_" + datetimestamp + "_combined_nodes.osm")
+    else:
+        if (verboose):
+            pprint("Warning! No nodes detected! Not generating 'node' shapefile");
+    if len(x._shapes) > 0:
+        x.save("osm2inc_" + datetimestamp + "_combined_ways.osm")
+    else:
+        if (verboose):
+            pprint("Warning! No ways detected! Not generating 'ways' shapefile");
+    if len(y._shapes) > 0:
+        y.save("osm2inc_" + datetimestamp + "_combined_areas.osm")
+    else:
+        if (verboose):
+            pprint("Warning! No areas(closed ways) detected! Not generating 'areas' shapefile");
     #pprint(node_array);
     #pprint(thefiles)
-    sleep(3)
+    if (verboose):
+        pprint("Done.")
 
 
 def handle_node_beacon_cardinal(theobject):
