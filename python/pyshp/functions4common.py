@@ -204,7 +204,34 @@ def processOSMFile(file, verboose):
                 
             
         elif (entry.tag == "way"):
-            None;
+            # We don't rely on the following anymore. because areas may be unclosed (like chek jawa restricted area, or very long closed was that are split up, like coastlines), and ways may be closed (like fences). We now rely on key/value mapping (like for the node identification above)
+            #if entry.find(".//nd[last()]").attrib['ref'] == entry.find(".//nd[1]").attrib['ref']:
+            #    print ("We Found an Area" + entry.attrib['id'])
+            #else:
+            #    print("We Found a way" + entry.attrib['id'])
+            
+            
+            if (entry.find("tag") != None):
+                thenode = collections.OrderedDict()
+                for tag in entry.findall("tag"):
+                    thenode[tag.attrib['k']] = tag.attrib['v']
+                    
+                for thekey, ele in all_elements_nice.items():
+                    if type(ele) is dict or type(ele) is collections.OrderedDict:
+                        shared_items = set(ele.items()) & set(thenode.items())
+                        if len(shared_items) == len(ele):
+                            print("WE FOUND ONE! " + thekey);
+                            None;
+                    elif type(ele) is list:
+                        for altele in ele:
+                            shared_items = set(altele.items()) & set(thenode.items())
+                            if len(shared_items) == len(altele):
+                                print("TODO: Check that this works.")
+                                print("WE FOUND ONE MULTI! " + thekey);
+            
+            
+            
+            
             #if (verboose):
             #    print("way or area");
     #node_array
