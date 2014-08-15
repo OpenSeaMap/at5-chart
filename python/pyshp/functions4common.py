@@ -8,7 +8,7 @@ import os
 import xml.etree.ElementTree as xmlTree
 import shapefile
 import sys
-
+import re
 
 w = shapefile.Writer(shapefile.POINT)
 w.field('x', 'N')
@@ -111,13 +111,51 @@ all_elements["marine_farm"] = [{"k": "seamark:type", "v": "marine_farm", "t": "a
 #natural=reef(area/node) rock(area/nodes)
 #restricted areas
 
+#specify multiple types with the same keys via t: [type, type]
+#TODO TO FIX: currently, multiple types with the same keys may throw an error, to check if multiple types via (if type(all_elements[key][ind][0]['t']) is list: #multiple types) and then use the old method to check if a way is closed or unclosed to determine if way or area. To add this check for nodes as well, just in case
+#todo, download coastline
 
+#all_elements["testlake"] = [[{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "lake"}],[{"k": "natural", "v": "lake", "t": "way"}]]
 
 node_array = collections.OrderedDict();
 
+    
 def printElementsByKey(fullprint = False):
+    firstcolwidth = 35
     if fullprint:
-        pprint(all_elements)
+        #pprint(all_elements)
+        print("List of elements with the key/value pairs that define them")
+        for thename, element in all_elements.items():
+            entry = ""
+            if type(element[0]) is dict:
+                for thekey in element:
+                    entry += thekey['k'] + " = " + thekey['v'] + "\n".ljust(firstcolwidth)
+                if type(element[0]['t']) is list:
+                    origentry = entry
+                    entry = "";
+                    for thetype in element[0]['t']:
+                        entry += (thename + " (" + thetype + ")").ljust(firstcolwidth-4) + " : " + re.sub('\n( *?)$', '', origentry) + "\n\n"
+                    entry = re.sub('\n\n$', '\n', entry);
+                else:
+                    entry = (thename + " (" + element[0]['t'] + ")").ljust(firstcolwidth-4) + " : " + re.sub('\n( *?)$', '', entry) + "\n"
+                print(entry)
+                
+            elif type(element[0]) is list:
+                for altelement in element:
+                    entry = ""
+                    for thekey in altelement:
+                        entry += thekey['k'] + " = " + thekey['v'] + "\n".ljust(firstcolwidth)
+                    if type(altelement[0]['t']) is list:
+                        origentry = entry
+                        entry = "";
+                        for thetype in altelement[0]['t']:
+                            entry += (thename + " (" + thetype + ")").ljust(firstcolwidth-4) + " : " + re.sub('\n( *?)$', '', origentry) + "\n\n"
+                        entry = re.sub('\n\n$', '\n', entry);
+                    else:
+                        entry = (thename + " (" + altelement[0]['t'] + ")").ljust(firstcolwidth-4) + " : " + re.sub('\n( *?)$', '', entry) + "\n"
+                    print(entry)
+            #elif element[0] is list:
+                
     else:
         for key in all_elements.keys():
             #pprint (all_elements[key]);
