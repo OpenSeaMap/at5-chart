@@ -106,9 +106,9 @@ all_elements["estuary"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "w
 all_elements["reservoir"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "reservoir"}]
 all_elements["river"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "river"}]
 all_elements["coral"] = [{"k": "subsea", "v": "coral", "t": "area"}]
+all_elements["marine_farm"] = [{"k": "seamark:type", "v": "marine_farm", "t": "area"}]
 
 #natural=reef(area/node) rock(area/nodes)
-#marine_farm (area)
 #restricted areas
 
 
@@ -243,17 +243,22 @@ def processOSMFile(file, verboose):
     
     for entry in root:
         if (entry.tag == "node"):
-            node_array[entry.attrib['id']] = {"lat": entry.attrib['lat'], "lon": entry.attrib['lon']}
+            node_array[entry.attrib['id']] = {"x": entry.attrib['lat'], "y": entry.attrib['lon']}
             if (entry.find("tag") != None):
                 thenode = collections.OrderedDict()
                 for tag in entry.findall("tag"):
                     thenode[tag.attrib['k']] = tag.attrib['v']
                     
+                cmpnode = dict(thenode)
+                thenode['id'] = entry.attrib['id']
+                thenode['x'] = entry.attrib['lat']
+                thenode['y'] = entry.attrib['lon']
+                    
                 for thekey, ele in all_elements_nice.items():
                     if type(ele) is dict or type(ele) is collections.OrderedDict:
                         cmpdict = dict(ele)
                         del cmpdict['t']
-                        shared_items = set(cmpdict.items()) & set(thenode.items())
+                        shared_items = set(cmpdict.items()) & set(cmpnode.items())
                         if len(shared_items) == len(cmpdict):
                             getattr(sys.modules[__name__], 'handle_node_' + thekey)(thenode);
                             break;
@@ -261,7 +266,7 @@ def processOSMFile(file, verboose):
                         for altele in ele:
                             cmpdict = dict(altele)
                             del cmpdict['t']
-                            shared_items = set(cmpdict.items()) & set(thenode.items())
+                            shared_items = set(cmpdict.items()) & set(cmpnode.items())
                             if len(shared_items) == len(cmpdict):
                                 getattr(sys.modules[__name__], 'handle_node_' + thekey)(thenode);
                                 break; #it doesn't break out of the second loop though. We don't care because I'm tired of this shit.
@@ -272,36 +277,46 @@ def processOSMFile(file, verboose):
             #else:
             #    print("We Found a way" + entry.attrib['id'])
             if (entry.find("tag") != None):
-                thenode = collections.OrderedDict()
+                theway = collections.OrderedDict()
                 for tag in entry.findall("tag"):
-                    thenode[tag.attrib['k']] = tag.attrib['v']
-                    
+                    theway[tag.attrib['k']] = tag.attrib['v']
+                
+                cmpway = dict(theway)
+                theway['id'] = entry.attrib['id']
+                thepoints = []
+                for thepoint in entry.findall("nd"):
+                    thepoints.append(thepoint.attrib['ref'])
+                theway['points'] = thepoints;
+                
                 for thekey, ele in all_elements_nice.items():
                     if type(ele) is dict or type(ele) is collections.OrderedDict:
                         cmpdict = dict(ele)
                         del cmpdict['t']
-                        shared_items = set(cmpdict.items()) & set(thenode.items())
+                        shared_items = set(cmpdict.items()) & set(cmpway.items())
                         if len(shared_items) == len(cmpdict):
                             if ele['t'] == 'way':
-                                getattr(sys.modules[__name__], 'handle_way_' + thekey)(thenode);
+                                getattr(sys.modules[__name__], 'handle_way_' + thekey)(theway);
+                                break;
                             elif ele['t'] == 'area':
-                                getattr(sys.modules[__name__], 'handle_area_' + thekey)(thenode);
+                                getattr(sys.modules[__name__], 'handle_area_' + thekey)(theway);
+                                break;
                     elif type(ele) is list:
                         for altele in ele:
                             cmpdict = dict(altele)
                             del cmpdict['t']
-                            shared_items = set(cmpdict.items()) & set(thenode.items())
+                            shared_items = set(cmpdict.items()) & set(cmpway.items())
                             if len(shared_items) == len(cmpdict):
                                 if altele['t'] == 'way':
-                                    getattr(sys.modules[__name__], 'handle_way_' + thekey)(thenode);
+                                    getattr(sys.modules[__name__], 'handle_way_' + thekey)(theway);
+                                    break;
                                 elif altele['t'] == 'area':
-                                    getattr(sys.modules[__name__], 'handle_area_' + thekey)(thenode);
+                                    getattr(sys.modules[__name__], 'handle_area_' + thekey)(theway);
+                                    break;
             
     
 def buildAllElementsNice():
     for thekey, ele in all_elements.items():
         thefinalele = collections.OrderedDict()
-        #print(ele);
         if type(ele[0]) is dict:
             for kvpair in ele:
                 thefinalele.update({kvpair['k']: kvpair['v']});
@@ -327,58 +342,607 @@ def processOSMFiles(thefiles, verboose):
             print ("-- Processing " + file + " (file " + str(i+1) + " of " + str(len(thefiles)) + ")")
         processOSMFile(file, verboose);
         
+    datetimestamp = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
+    w.save("osm2inc_" + datetimestamp + "_combined_nodes.osm")
+    x.save("osm2inc_" + datetimestamp + "_combined_ways.osm")
+    #y.save("osm2inc_" + datetimestamp + "_combined_areas.osm")
     #pprint(node_array);
     #pprint(thefiles)
     sleep(3)
 
 
 def handle_node_beacon_cardinal(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nCategory ").join(theobject.get('seamark:beacon_cardinal:category', ''))
+    infobox.join("\r\nColour ").join(theobject.get('seamark:beacon_cardinal:colour', ''))
+    infobox.join("\r\nColour Pattern ").join(theobject.get('seamark:beacon_cardinal:colour_pattern', ''))
+    infobox.join("\r\nTopmark Shape ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nTopmark Colour ").join(theobject.get('seamark:topmark:colour', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
     
-def handle_node_beacon_lateral(theobject):
-    None;
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Cardinal'
+    
+    if theobject.get('seamark:beacon_cardinal:category', '') == "north":
+        icon = "TrNorthCardinalBuoy"
+    elif theobject.get('seamark:beacon_cardinal:category', '') == "south":
+        icon = "TrSouthCardinalBuoy"
+    elif theobject.get('seamark:beacon_cardinal:category', '') == "east":
+        icon = "TrEastCardinalBuoy"
+    elif theobject.get('seamark:beacon_cardinal:category', '') == "west":
+        icon = "TrWestCardinalBuoy"
+    
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    else:
+        icon = icon
+    
+    icon += "Big"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 def handle_node_beacon_isolated_danger(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nColour: ").join(theobject.get('seamark:beacon_isolated_danger:colour', ''))
+    infobox.join("\r\nColour Pattern: ").join(theobject.get('seamark:beacon_isolated_danger:colour_pattern', ''))
+    infobox.join("\r\nTopmark Shape: ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nTopmark Colour: ").join(theobject.get('seamark:topmark:colour', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
+    
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Danger'
+    
+    icon = "TrIsoDangerBuoy"
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    icon += "Big"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
+    
+def handle_node_beacon_lateral(theobject):
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nCategory ").join(theobject.get('seamark:beacon_lateral:category', ''))
+    infobox.join("\r\nColour ").join(theobject.get('seamark:beacon_lateral:colour', ''))
+    infobox.join("\r\nShape ").join(theobject.get('seamark:beacon_lateral:shape', ''))
+    infobox.join("\r\nTopmark Shape ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nSystem ").join(theobject.get('seamark:beacon_lateral:system', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
+    
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Lateral'
+    if theobject.get('seamark:beacon_lateral:category', '') == "port":
+        if theobject.get('seamark:beacon_lateral:system', '') == "iala-b":
+            icon = "TrPortHandBeaconRegB"
+        else:
+            icon = "TrPortHandBeaconRegA"
+    elif theobject.get('seamark:beacon_lateral:category', '') == "starboard":
+        if theobject.get('seamark:beacon_lateral:system', '') == "iala-b":
+            icon = "TrStarboardHandBeaconRegB"
+        else:
+            icon = "TrStarboardHandBeaconRegA"
+    else:
+        #prefered channel buoys and inland buoys - as there are no default icons in IMC yet #tofix this.. for beacons
+        icon = "TrBeaconGeneric";
+    
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "LBig"
+    else:
+        icon += "Big"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 def handle_node_beacon_safe_water(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nColour: ").join(theobject.get('seamark:beacon_safe_water:colour', ''))
+    infobox.join("\r\nColour Pattern: ").join(theobject.get('seamark:beacon_safe_water:colour_pattern', ''))
+    infobox.join("\r\nTopmark Shape: ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nTopmark Colour: ").join(theobject.get('seamark:topmark:colour', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
+    
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Safe Water'
+    
+    icon = "TrSafeWatersBuoy"
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 def handle_node_beacon_special_purpose(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', '')).join("\r\nCategory: ").join(theobject.get('seamark:beacon_special_purpose:category', '')).join("\r\nNo further description available at this time.")
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Special Purpose'
+    
+    icon = "TrSpecialPurposeBuoyYellow"
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 
 def handle_node_buoy_cardinal(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nCategory ").join(theobject.get('seamark:buoy_cardinal:category', ''))
+    infobox.join("\r\nColour ").join(theobject.get('seamark:buoy_cardinal:colour', ''))
+    infobox.join("\r\nColour Pattern ").join(theobject.get('seamark:buoy_cardinal:colour_pattern', ''))
+    infobox.join("\r\nTopmark Shape ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nTopmark Colour ").join(theobject.get('seamark:topmark:colour', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
     
-def handle_node_buoy_lateral(theobject):
-    None;
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Cardinal'
+    
+    if theobject.get('seamark:buoy_cardinal:category', '') == "north":
+        icon = "TrNorthCardinalBuoy"
+    elif theobject.get('seamark:buoy_cardinal:category', '') == "south":
+        icon = "TrSouthCardinalBuoy"
+    elif theobject.get('seamark:buoy_cardinal:category', '') == "east":
+        icon = "TrEastCardinalBuoy"
+    elif theobject.get('seamark:buoy_cardinal:category', '') == "west":
+        icon = "TrWestCardinalBuoy"
+    
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    else:
+        icon = icon
+    
+    icon += "Big"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 def handle_node_buoy_isolated_danger(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nColour: ").join(theobject.get('seamark:buoy_isolated_danger:colour', ''))
+    infobox.join("\r\nColour Pattern: ").join(theobject.get('seamark:buoy_isolated_danger:colour_pattern', ''))
+    infobox.join("\r\nTopmark Shape: ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nTopmark Colour: ").join(theobject.get('seamark:topmark:colour', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
+    
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Danger'
+    
+    icon = "TrIsoDangerBuoy"
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    icon += "Big"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
+    
+def handle_node_buoy_lateral(theobject):
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nCategory ").join(theobject.get('seamark:buoy_lateral:category', ''))
+    infobox.join("\r\nColour ").join(theobject.get('seamark:buoy_lateral:colour', ''))
+    infobox.join("\r\nShape ").join(theobject.get('seamark:buoy_lateral:shape', ''))
+    infobox.join("\r\nTopmark Shape ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nSystem ").join(theobject.get('seamark:buoy_lateral:system', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
+    
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Lateral'
+    
+    if theobject.get('seamark:buoy_lateral:category', '') == "port":
+        if theobject.get('seamark:buoy_lateral:shape', '') == "pillar" or \
+        theobject.get('seamark:buoy_lateral:shape', '') == "spar" or \
+        theobject.get('seamark:buoy_lateral:shape', '') == "ice_buoy" or \
+        theobject.get('seamark:buoy_lateral:shape', '') == "super-buoy":
+            if theobject.get('seamark:buoy_lateral:system', '') == "iala-b":
+                icon = "TrPortHandBuoyRegB"
+            else:
+                icon = "TrPortHandBuoyRegA"
+        else:
+            #includes conical, can, spherical, barrel
+            if theobject.get('seamark:buoy_lateral:system', '') == "iala-b":
+                icon = "TrBuoyFinalGreen"
+            else:
+                icon = "TrBuoyFinalRed"
+    elif theobject.get('seamark:buoy_lateral:category', '') == "starboard":
+        if theobject.get('seamark:buoy_lateral:shape', '') == "pillar" or \
+        theobject.get('seamark:buoy_lateral:shape', '') == "spar" or \
+        theobject.get('seamark:buoy_lateral:shape', '') == "ice_buoy" or \
+        theobject.get('seamark:buoy_lateral:shape', '') == "super-buoy":
+            if theobject.get('seamark:buoy_lateral:system', '') == "iala-b":
+                icon = "TrStarboardHandBuoyRegB"
+            else:
+                icon = "TrStarboardHandBuoyRegA"
+        else:
+            #includes conical, can, spherical, barrel
+            if theobject.get('seamark:buoy_lateral:system', '') == "iala-b":
+                icon = "TrBuoyFinalRed"
+            else:
+                icon = "TrBuoyFinalGreen"
+    else:
+        #prefered channel buoys and inland buoys - as there are no default icons in IMC yet
+        icon = "TrBuoyFinalWhite";
+    
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    else:
+        icon = icon
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
+    
     
 def handle_node_buoy_mooring(theobject):
-    None;
+    handle_node_buoy_special_purpose(theobject);
     
 def handle_node_buoy_safe_water(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', ''))
+    infobox.join("\r\nType: ").join(theobject.get('seamark:type', ''))
+    infobox.join("\r\nColour: ").join(theobject.get('seamark:buoy_safe_water:colour', ''))
+    infobox.join("\r\nColour Pattern: ").join(theobject.get('seamark:buoy_safe_water:colour_pattern', ''))
+    infobox.join("\r\nTopmark Shape: ").join(theobject.get('seamark:topmark:shape', ''))
+    infobox.join("\r\nTopmark Colour: ").join(theobject.get('seamark:topmark:colour', ''))
+    infobox.join("\r\nLight Character ").join(theobject.get('seamark:light:character', ''))
+    infobox.join("\r\nLight Colour ").join(theobject.get('seamark:light:colour', ''))
+    infobox.join("\r\nLight Period ").join(theobject.get('seamark:light:period', ''))
+    infobox.join("\r\nLight Height ").join(theobject.get('seamark:light:height', ''))
+    infobox.join("\r\nLight Range ").join(theobject.get('seamark:light:range', ''))
+    infobox.join("\r\nLight Reference ").join(theobject.get('seamark:light:reference', ''))
+    
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Safe Water'
+    
+    icon = "TrSafeWatersBuoy"
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 def handle_node_buoy_special_purpose(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', '')).join("\r\nCategory: ").join(theobject.get('seamark:buoy_special_purpose:category', '')).join("\r\nNo further description available at this time.")
+    majcat = 'NAUTICAL'
+    mincat = 'Beacon/Buoy - Special Purpose'
+    
+    icon = "TrSpecialPurposeBuoyYellow"
+    if theobject.get('seamark:light:colour', '') != '':
+        icon += "L"
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 
 def handle_node_gate(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', '')).join("\r\nNo further description available at this time.")
+    majcat = 'NAUTICAL'
+    if theobject['seamark:gate:category'].lower() == "dyke" \
+        or theobject['seamark:gate:category'].lower() == "lock" \
+        or theobject['seamark:gate:category'].lower() == "caisson" \
+        or theobject['seamark:gate:category'].lower() == "flood_barrage":
+        mincat = 'Dyke'
+        icon = 'PGATE'
+    else:
+        #theobject['seamark:gate:category'].lower() == "sluice" or theobject['seamark:gate:category'].lower() == "general"
+        mincat = 'Gate'
+        icon = 'PGATE'
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 def handle_node_rock(theobject):
     None;
     
 def handle_node_wreck(theobject):
-    None;
+    infobox = "Name: ".join(theobject.get('seamark:name', '')).join("\r\nNo further description available at this time.")
+    majcat = 'NAUTICAL'
+    mincat = 'WRECK'
+    if theobject['seamark:wreck:category'].lower() == "non-dangerous" or theobject['seamark:wreck:category'].lower() == "distributed_remains":
+        icon = 'PWRECKS_1_BIG'
+    elif theobject['seamark:wreck:category'].lower() == "dangerous" or theobject['seamark:wreck:category'].lower() == "mast_showing":
+        icon = 'PWRECKS_4_BIG'
+    elif theobject['seamark:wreck:category'].lower() == "hull_showing":
+        icon = 'PWRECKS_5_BIG'
+    else:
+        icon = 'PWRECKS_4_BIG'
+    
+    w.point(float(theobject['x']), float(theobject['y']))
+    w.record(
+        theobject['x'],
+        theobject['y'],
+        theobject['id'],
+        0,
+        19,
+        19,
+        19,
+        15,
+        1,
+        15,
+        50,
+        'T',
+        infobox,
+        theobject.get('seamark:name', ''),
+        majcat,
+        mincat,
+        icon,
+        icon
+    )
     
 
 def handle_way_boom(theobject):
-    None;
+    wayparts = []
+    for node in theobject['points']:
+        wayparts.append([float(node_array[node]['x']), float(node_array[node]['y'])])
+    x.line(parts=[wayparts])
+    x.record(theobject['id'], 
+    0,
+    19,
+    1,
+    19,
+    19,
+    255,
+    0,
+    255,
+    19,
+    2,
+    2,
+    15,
+    50,
+    "T",
+    "Blue Barrels",
+    "NAUTICAL",
+    "OBSTRUCTION",
+    "TrObstruction",
+    "11001100110011",
+    "11001100110011")
     
 def handle_way_fence(theobject):
     None;
@@ -405,592 +969,60 @@ def handle_area_river(theobject):
 def handle_area_coral(theobject):
     None;
     
-
-#processing rules
-def handleWrecks(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', '')).join("\r\nNo further description available at this time.")
-    majcat = 'NAUTICAL'
-    mincat = 'WRECK'
-    if thepoint['seamark:wreck:category'].lower() == "non-dangerous" or thepoint['seamark:wreck:category'].lower() == "distributed_remains":
-        icon = 'PWRECKS_1_BIG'
-    elif thepoint['seamark:wreck:category'].lower() == "dangerous" or thepoint['seamark:wreck:category'].lower() == "mast_showing":
-        icon = 'PWRECKS_4_BIG'
-    elif thepoint['seamark:wreck:category'].lower() == "hull_showing":
-        icon = 'PWRECKS_5_BIG'
-    else:
-        icon = 'PWRECKS_4_BIG'
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-    
-def handleGates(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', '')).join("\r\nNo further description available at this time.")
-    majcat = 'NAUTICAL'
-    if thepoint['seamark:gate:category'].lower() == "dyke" \
-        or thepoint['seamark:gate:category'].lower() == "lock" \
-        or thepoint['seamark:gate:category'].lower() == "caisson" \
-        or thepoint['seamark:gate:category'].lower() == "flood_barrage":
-        mincat = 'Dyke'
-        icon = 'PGATE'
-    else:
-        #thepoint['seamark:gate:category'].lower() == "sluice" or thepoint['seamark:gate:category'].lower() == "general"
-        mincat = 'Gate'
-        icon = 'PGATE'
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-
-def handleBeaconCardinal(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nCategory ").join(thepoint.get('seamark:beacon_cardinal:category', ''))
-    infobox.join("\r\nColour ").join(thepoint.get('seamark:beacon_cardinal:colour', ''))
-    infobox.join("\r\nColour Pattern ").join(thepoint.get('seamark:beacon_cardinal:colour_pattern', ''))
-    infobox.join("\r\nTopmark Shape ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nTopmark Colour ").join(thepoint.get('seamark:topmark:colour', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Cardinal'
-    
-    if thepoint.get('seamark:beacon_cardinal:category', '') == "north":
-        icon = "TrNorthCardinalBuoy"
-    elif thepoint.get('seamark:beacon_cardinal:category', '') == "south":
-        icon = "TrSouthCardinalBuoy"
-    elif thepoint.get('seamark:beacon_cardinal:category', '') == "east":
-        icon = "TrEastCardinalBuoy"
-    elif thepoint.get('seamark:beacon_cardinal:category', '') == "west":
-        icon = "TrWestCardinalBuoy"
-    
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    else:
-        icon = icon
-    
-    icon += "Big"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
+def handle_area_marine_farm(theobject):
+    wayparts = []
+    for node in theobject['points']:
+        wayparts.append([float(node_array[node]['x']), float(node_array[node]['y'])])
+        
+    if theobject['points'][0] != theobject['points'][last()]: #close unclosed ways
+        wayparts.append([float(node_array[theobject['points'][0]]['x']), float(node_array[theobject['points'][0]]['y'])])
+        
+    y.poly(parts=[wayparts])
+    y.record(theobject['id'], 
+    0,
+    34,
+    30,
+    50,
+    "T",
+    theobject.get('name', ''),
+    'FHS_FISHERYAP_FY',
+    "NAUTICAL",
+    "Marine Farm")
     
     
-def handleBeaconIsolatedDanger(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nColour: ").join(thepoint.get('seamark:beacon_isolated_danger:colour', ''))
-    infobox.join("\r\nColour Pattern: ").join(thepoint.get('seamark:beacon_isolated_danger:colour_pattern', ''))
-    infobox.join("\r\nTopmark Shape: ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nTopmark Colour: ").join(thepoint.get('seamark:topmark:colour', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Danger'
-    
-    icon = "TrIsoDangerBuoy"
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    icon += "Big"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
     
     
-def handleBeaconLateral(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nCategory ").join(thepoint.get('seamark:beacon_lateral:category', ''))
-    infobox.join("\r\nColour ").join(thepoint.get('seamark:beacon_lateral:colour', ''))
-    infobox.join("\r\nShape ").join(thepoint.get('seamark:beacon_lateral:shape', ''))
-    infobox.join("\r\nTopmark Shape ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nSystem ").join(thepoint.get('seamark:beacon_lateral:system', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Lateral'
-    if thepoint.get('seamark:beacon_lateral:category', '') == "port":
-        if thepoint.get('seamark:beacon_lateral:system', '') == "iala-b":
-            icon = "TrPortHandBeaconRegB"
-        else:
-            icon = "TrPortHandBeaconRegA"
-    elif thepoint.get('seamark:beacon_lateral:category', '') == "starboard":
-        if thepoint.get('seamark:beacon_lateral:system', '') == "iala-b":
-            icon = "TrStarboardHandBeaconRegB"
-        else:
-            icon = "TrStarboardHandBeaconRegA"
-    else:
-        #prefered channel buoys and inland buoys - as there are no default icons in IMC yet #tofix this.. for beacons
-        icon = "TrBeaconGeneric";
-    
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "LBig"
-    else:
-        icon += "Big"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-
-    
-def handleBeaconSafeWater(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nColour: ").join(thepoint.get('seamark:beacon_safe_water:colour', ''))
-    infobox.join("\r\nColour Pattern: ").join(thepoint.get('seamark:beacon_safe_water:colour_pattern', ''))
-    infobox.join("\r\nTopmark Shape: ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nTopmark Colour: ").join(thepoint.get('seamark:topmark:colour', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Safe Water'
-    
-    icon = "TrSafeWatersBuoy"
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-    
-def handleBeaconSpecialPurpose(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', '')).join("\r\nCategory: ").join(thepoint.get('seamark:beacon_special_purpose:category', '')).join("\r\nNo further description available at this time.")
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Special Purpose'
-    
-    icon = "TrSpecialPurposeBuoyYellow"
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
     
     
-
-
-def handleBuoyCardinal(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nCategory ").join(thepoint.get('seamark:buoy_cardinal:category', ''))
-    infobox.join("\r\nColour ").join(thepoint.get('seamark:buoy_cardinal:colour', ''))
-    infobox.join("\r\nColour Pattern ").join(thepoint.get('seamark:buoy_cardinal:colour_pattern', ''))
-    infobox.join("\r\nTopmark Shape ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nTopmark Colour ").join(thepoint.get('seamark:topmark:colour', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
     
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Cardinal'
+def handleFW(way, nodes, w):
+    wayparts = []
+    for node in way['cnodes']:
+        wayparts.append([float(nodes[node]['x']), float(nodes[node]['y'])])
+    w.poly(parts=[wayparts])
+    w.record(way['id'], 
+    0,
+    34,
+    16,
+    98,
+    "T",
+    way.get('name', 'Freshwater'),
+    '',
+    "NAUTICAL",
+    "Lake")
     
-    if thepoint.get('seamark:buoy_cardinal:category', '') == "north":
-        icon = "TrNorthCardinalBuoy"
-    elif thepoint.get('seamark:buoy_cardinal:category', '') == "south":
-        icon = "TrSouthCardinalBuoy"
-    elif thepoint.get('seamark:buoy_cardinal:category', '') == "east":
-        icon = "TrEastCardinalBuoy"
-    elif thepoint.get('seamark:buoy_cardinal:category', '') == "west":
-        icon = "TrWestCardinalBuoy"
-    
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    else:
-        icon = icon
-    
-    icon += "Big"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-    
-def handleBuoyIsolatedDanger(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nColour: ").join(thepoint.get('seamark:buoy_isolated_danger:colour', ''))
-    infobox.join("\r\nColour Pattern: ").join(thepoint.get('seamark:buoy_isolated_danger:colour_pattern', ''))
-    infobox.join("\r\nTopmark Shape: ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nTopmark Colour: ").join(thepoint.get('seamark:topmark:colour', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Danger'
-    
-    icon = "TrIsoDangerBuoy"
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    icon += "Big"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-
-def handleBuoyLateral(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nCategory ").join(thepoint.get('seamark:buoy_lateral:category', ''))
-    infobox.join("\r\nColour ").join(thepoint.get('seamark:buoy_lateral:colour', ''))
-    infobox.join("\r\nShape ").join(thepoint.get('seamark:buoy_lateral:shape', ''))
-    infobox.join("\r\nTopmark Shape ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nSystem ").join(thepoint.get('seamark:buoy_lateral:system', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Lateral'
-    
-    if thepoint.get('seamark:buoy_lateral:category', '') == "port":
-        if thepoint.get('seamark:buoy_lateral:shape', '') == "pillar" or \
-        thepoint.get('seamark:buoy_lateral:shape', '') == "spar" or \
-        thepoint.get('seamark:buoy_lateral:shape', '') == "ice_buoy" or \
-        thepoint.get('seamark:buoy_lateral:shape', '') == "super-buoy":
-            if thepoint.get('seamark:buoy_lateral:system', '') == "iala-b":
-                icon = "TrPortHandBuoyRegB"
-            else:
-                icon = "TrPortHandBuoyRegA"
-        else:
-            #includes conical, can, spherical, barrel
-            if thepoint.get('seamark:buoy_lateral:system', '') == "iala-b":
-                icon = "TrBuoyFinalGreen"
-            else:
-                icon = "TrBuoyFinalRed"
-    elif thepoint.get('seamark:buoy_lateral:category', '') == "starboard":
-        if thepoint.get('seamark:buoy_lateral:shape', '') == "pillar" or \
-        thepoint.get('seamark:buoy_lateral:shape', '') == "spar" or \
-        thepoint.get('seamark:buoy_lateral:shape', '') == "ice_buoy" or \
-        thepoint.get('seamark:buoy_lateral:shape', '') == "super-buoy":
-            if thepoint.get('seamark:buoy_lateral:system', '') == "iala-b":
-                icon = "TrStarboardHandBuoyRegB"
-            else:
-                icon = "TrStarboardHandBuoyRegA"
-        else:
-            #includes conical, can, spherical, barrel
-            if thepoint.get('seamark:buoy_lateral:system', '') == "iala-b":
-                icon = "TrBuoyFinalRed"
-            else:
-                icon = "TrBuoyFinalGreen"
-    else:
-        #prefered channel buoys and inland buoys - as there are no default icons in IMC yet
-        icon = "TrBuoyFinalWhite";
-    
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    else:
-        icon = icon
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-
-def handleBuoySafeWater(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', ''))
-    infobox.join("\r\nType: ").join(thepoint.get('seamark:type', ''))
-    infobox.join("\r\nColour: ").join(thepoint.get('seamark:buoy_safe_water:colour', ''))
-    infobox.join("\r\nColour Pattern: ").join(thepoint.get('seamark:buoy_safe_water:colour_pattern', ''))
-    infobox.join("\r\nTopmark Shape: ").join(thepoint.get('seamark:topmark:shape', ''))
-    infobox.join("\r\nTopmark Colour: ").join(thepoint.get('seamark:topmark:colour', ''))
-    infobox.join("\r\nLight Character ").join(thepoint.get('seamark:light:character', ''))
-    infobox.join("\r\nLight Colour ").join(thepoint.get('seamark:light:colour', ''))
-    infobox.join("\r\nLight Period ").join(thepoint.get('seamark:light:period', ''))
-    infobox.join("\r\nLight Height ").join(thepoint.get('seamark:light:height', ''))
-    infobox.join("\r\nLight Range ").join(thepoint.get('seamark:light:range', ''))
-    infobox.join("\r\nLight Reference ").join(thepoint.get('seamark:light:reference', ''))
-    
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Safe Water'
-    
-    icon = "TrSafeWatersBuoy"
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-    
-def handleBuoySpecialPurpose(thepoint, w):
-    infobox = "Name: ".join(thepoint.get('seamark:name', '')).join("\r\nCategory: ").join(thepoint.get('seamark:buoy_special_purpose:category', '')).join("\r\nNo further description available at this time.")
-    majcat = 'NAUTICAL'
-    mincat = 'Beacon/Buoy - Special Purpose'
-    
-    icon = "TrSpecialPurposeBuoyYellow"
-    if thepoint.get('seamark:light:colour', '') != '':
-        icon += "L"
-    
-    w.point(float(thepoint['x']), float(thepoint['y']))
-    w.record(
-        thepoint['x'],
-        thepoint['y'],
-        thepoint['id'],
-        0,
-        19,
-        19,
-        19,
-        15,
-        1,
-        15,
-        50,
-        'T',
-        infobox,
-        thepoint.get('seamark:name', ''),
-        majcat,
-        mincat,
-        icon,
-        icon
-    )
-    return w
-
-
-#bounds_lat_north = "1.5962442743900633"
-#bounds_lat_south = "1.0553144713908544"
-#bounds_lon_west = "103.41430664062499"
-#bounds_lon_east = "104.315185546875"
-#mark_type = 'marine_farm'
-#additional_keys = ''
-#
-##osmurl = 'http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:xml];(way["natural"="water"](' + bounds_lat_south + ',' + bounds_lon_west + ',' + bounds_lat_north + ',' + bounds_lon_east + ');way["seamark:type"="marine_farm"](' + bounds_lat_south + ',' + bounds_lon_west + ',' + bounds_lat_north + ',' + bounds_lon_east + '););(._;>;);out;'
-#osmurl = 'http://overpass.osm.rambler.ru/cgi/interpreter?data=[out:xml];way["seamark:type"="marine_farm"](' + bounds_lat_south + ',' + bounds_lon_west + ',' + bounds_lat_north + ',' + bounds_lon_east + ');(._;>;);out;'
-#osmfile = mark_type + '_singapore.osm'
-#
-##urllib.request.urlretrieve(osmurl, osmfile)
+def handleSW(way, nodes, w):
+    wayparts = []
+    for node in way['cnodes']:
+        wayparts.append([float(nodes[node]['x']), float(nodes[node]['y'])])
+    w.poly(parts=[wayparts])
+    w.record(way['id'], 
+    0,
+    34,
+    11,
+    98,
+    "T",
+    way.get('name', 'Salt/Brackish'),
+    '',
+    "NAUTICAL",
+    "River")
