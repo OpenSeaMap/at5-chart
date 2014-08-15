@@ -6,6 +6,70 @@ from time import sleep
 import socket
 import os
 import xml.etree.ElementTree as xmlTree
+import shapefile
+import sys
+
+
+w = shapefile.Writer(shapefile.POINT)
+w.field('x', 'N')
+w.field('y', 'N')
+w.field('id', 'N')
+w.field('L_LIMIT', 'N', 50, 0)
+w.field('U_LIMIT', 'N')
+w.field('COLOR', 'N')
+w.field('RTP_COLOR', 'N')
+w.field('RTP_LIMIT', 'N')
+w.field('WIDTH', 'N')
+w.field('FONT', 'N')
+w.field('LAYER', 'N')
+w.field('MODE')
+w.field('INFO_BOX')
+w.field('VALUE')
+w.field('MAJ_CAT')
+w.field('MIN_CAT')
+w.field('ICON')
+w.field('P_ICON')
+
+x = shapefile.Writer(shapefile.POLYLINE)
+
+x.field('id', 'N')
+x.field('L_LIMIT', 'N', 50, 0)
+x.field('U_LIMIT', 'N')
+x.field('COLOR', 'N')
+x.field('RTP_COLOR', 'N')
+x.field('RTP_LIMIT', 'N')
+x.field('BFR_COLOR', 'N') #15
+x.field('BFR_WIDTH', 'N') #2
+x.field('BDR_COLOR', 'N')
+x.field('HAL_COLOR', 'N')
+x.field('WIDTH', 'N')
+x.field('WIDTH_MULT', 'N') #multiplied with width
+x.field('FONT', 'N')
+x.field('LAYER', 'N')
+x.field('MODE')
+x.field('VALUE')
+x.field('MAJ_CAT')
+x.field('MIN_CAT')
+x.field('ICON')
+x.field('BFR_PATTERN') #11001100110011 #"dotted" line expressed in 1(line) and 0 (no line) up to 32 chars
+x.field('PATTERN') #11001100110011
+#x.field('HAL_CLRRGB')
+
+y = shapefile.Writer(shapefile.POLYGON)
+
+y.field('id', 'N')
+y.field('L_LIMIT', 'N', 50, 0)
+y.field('U_LIMIT', 'N')
+y.field('COLOR', 'N')
+y.field('LAYER', 'N')
+y.field('MODE')
+y.field('VALUE')
+y.field('ICON')
+y.field('MAJ_CAT')
+y.field('MIN_CAT')
+
+
+
 
 all_elements_nice = collections.OrderedDict()
 
@@ -21,13 +85,14 @@ all_elements["beacon_special_purpose"] = [{"k": "seamark:type", "v": "beacon_spe
 all_elements["buoy_cardinal"] = [{"k": "seamark:type", "v": "buoy_cardinal", "t": "node"}]
 all_elements["buoy_lateral"] = [{"k": "seamark:type", "v": "buoy_lateral", "t": "node"}]
 all_elements["buoy_isolated_danger"] = [{"k": "seamark:type", "v": "buoy_isolated_danger", "t": "node"}]
+all_elements["buoy_mooring"] = [{"k": "seamark:type", "v": "mooring", "t": "node"}, {"k": "seamark:mooring:category", "v": "buoy"}]
 all_elements["buoy_safe_water"] = [{"k": "seamark:type", "v": "buoy_safe_water", "t": "node"}]
 all_elements["buoy_special_purpose"] = [{"k": "seamark:type", "v": "buoy_special_purpose", "t": "node"}]
 #all_elements["buoy_all"] = [{"k": "seamark:type", "regv": "buoy*", "t": "node"}]
-all_elements["buoy_mooring"] = [{"k": "seamark:type", "v": "mooring", "t": "node"}, {"k": "seamark:mooring:category", "v": "buoy"}]
 
-all_elements["wreck"] = [{"k": "seamark:type", "v": "wreck", "t": "node"}]
+all_elements["gate"] = [{"k": "seamark:type", "v": "gate", "t": ["node", "area"]}]
 all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}]
+all_elements["wreck"] = [{"k": "seamark:type", "v": "wreck", "t": "node"}]
 
 
 all_elements["boom"] = [{"k": "seamark:type", "v": "obstruction", "t": "way"}, {"k": "seamark:obstruction:category", "v": "boom"}]
@@ -42,8 +107,6 @@ all_elements["reservoir"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": 
 all_elements["river"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "river"}]
 all_elements["coral"] = [{"k": "subsea", "v": "coral", "t": "area"}]
 
-
-all_elements["gate"] = [{"k": "seamark:type", "v": "gate", "t": ["node", "area"]}]
 #natural=reef(area/node) rock(area/nodes)
 #marine_farm (area)
 #restricted areas
@@ -188,29 +251,26 @@ def processOSMFile(file, verboose):
                     
                 for thekey, ele in all_elements_nice.items():
                     if type(ele) is dict or type(ele) is collections.OrderedDict:
-                        shared_items = set(ele.items()) & set(thenode.items())
-                        if len(shared_items) == len(ele):
-                            print("WE FOUND ONE! " + thekey);
-                            None;
+                        cmpdict = dict(ele)
+                        del cmpdict['t']
+                        shared_items = set(cmpdict.items()) & set(thenode.items())
+                        if len(shared_items) == len(cmpdict):
+                            getattr(sys.modules[__name__], 'handle_node_' + thekey)(thenode);
+                            break;
                     elif type(ele) is list:
                         for altele in ele:
-                            shared_items = set(altele.items()) & set(thenode.items())
-                            if len(shared_items) == len(altele):
-                                print("TODO: Check that this works.")
-                                print("WE FOUND ONE MULTI! " + thekey);
-                    
-                #pprint (thenode);
-                
-                
-            
+                            cmpdict = dict(altele)
+                            del cmpdict['t']
+                            shared_items = set(cmpdict.items()) & set(thenode.items())
+                            if len(shared_items) == len(cmpdict):
+                                getattr(sys.modules[__name__], 'handle_node_' + thekey)(thenode);
+                                break; #it doesn't break out of the second loop though. We don't care because I'm tired of this shit.
         elif (entry.tag == "way"):
             # We don't rely on the following anymore. because areas may be unclosed (like chek jawa restricted area, or very long closed was that are split up, like coastlines), and ways may be closed (like fences). We now rely on key/value mapping (like for the node identification above)
             #if entry.find(".//nd[last()]").attrib['ref'] == entry.find(".//nd[1]").attrib['ref']:
             #    print ("We Found an Area" + entry.attrib['id'])
             #else:
             #    print("We Found a way" + entry.attrib['id'])
-            
-            
             if (entry.find("tag") != None):
                 thenode = collections.OrderedDict()
                 for tag in entry.findall("tag"):
@@ -218,23 +278,25 @@ def processOSMFile(file, verboose):
                     
                 for thekey, ele in all_elements_nice.items():
                     if type(ele) is dict or type(ele) is collections.OrderedDict:
-                        shared_items = set(ele.items()) & set(thenode.items())
-                        if len(shared_items) == len(ele):
-                            print("WE FOUND ONE! " + thekey);
-                            None;
+                        cmpdict = dict(ele)
+                        del cmpdict['t']
+                        shared_items = set(cmpdict.items()) & set(thenode.items())
+                        if len(shared_items) == len(cmpdict):
+                            if ele['t'] == 'way':
+                                getattr(sys.modules[__name__], 'handle_way_' + thekey)(thenode);
+                            elif ele['t'] == 'area':
+                                getattr(sys.modules[__name__], 'handle_area_' + thekey)(thenode);
                     elif type(ele) is list:
                         for altele in ele:
-                            shared_items = set(altele.items()) & set(thenode.items())
-                            if len(shared_items) == len(altele):
-                                print("TODO: Check that this works.")
-                                print("WE FOUND ONE MULTI! " + thekey);
+                            cmpdict = dict(altele)
+                            del cmpdict['t']
+                            shared_items = set(cmpdict.items()) & set(thenode.items())
+                            if len(shared_items) == len(cmpdict):
+                                if altele['t'] == 'way':
+                                    getattr(sys.modules[__name__], 'handle_way_' + thekey)(thenode);
+                                elif altele['t'] == 'area':
+                                    getattr(sys.modules[__name__], 'handle_area_' + thekey)(thenode);
             
-            
-            
-            
-            #if (verboose):
-            #    print("way or area");
-    #node_array
     
 def buildAllElementsNice():
     for thekey, ele in all_elements.items():
@@ -243,6 +305,7 @@ def buildAllElementsNice():
         if type(ele[0]) is dict:
             for kvpair in ele:
                 thefinalele.update({kvpair['k']: kvpair['v']});
+            thefinalele.update({'t': ele[0]['t']})
             all_elements_nice.update({thekey: thefinalele});
         elif type(ele[0]) is list:
             thesemifinalele = []
@@ -250,44 +313,9 @@ def buildAllElementsNice():
                 thequarterfinalele = collections.OrderedDict()
                 for kvpair in alternate:
                     thequarterfinalele.update({kvpair['k']: kvpair['v']});
+                thequarterfinalele.update({'t': alternate[0]['t']})
                 thesemifinalele.append(thequarterfinalele);
             all_elements_nice.update({thekey: thesemifinalele});
-    
-    
-    
-##all_elements["beacon_cardinal"] = [{"k": "seamark:type", "v": "beacon_cardinal", "t": "node"}]
-##all_elements["beacon_lateral"] = [{"k": "seamark:type", "v": "beacon_lateral", "t": "node"}]
-##all_elements["beacon_isolated_danger"] = [{"k": "seamark:type", "v": "beacon_isolated_danger", "t": "node"}]
-##all_elements["beacon_safe_water"] = [{"k": "seamark:type", "v": "beacon_safe_water", "t": "node"}]
-##all_elements["beacon_special_purpose"] = [{"k": "seamark:type", "v": "beacon_special_purpose", "t": "node"}]
-#all_elements["beacon_all"] = [{"k": "seamark:type", "regv": "beacon*", "t": "node"}]
-##all_elements["buoy_cardinal"] = [{"k": "seamark:type", "v": "buoy_cardinal", "t": "node"}]
-##all_elements["buoy_lateral"] = [{"k": "seamark:type", "v": "buoy_lateral", "t": "node"}]
-##all_elements["buoy_isolated_danger"] = [{"k": "seamark:type", "v": "buoy_isolated_danger", "t": "node"}]
-##all_elements["buoy_safe_water"] = [{"k": "seamark:type", "v": "buoy_safe_water", "t": "node"}]
-##all_elements["buoy_special_purpose"] = [{"k": "seamark:type", "v": "buoy_special_purpose", "t": "node"}]
-#all_elements["buoy_mooring"] = [{"k": "seamark:type", "v": "mooring", "t": "node"}, {"k": "seamark:mooring:category", "v": "buoy"}]
-#all_elements["buoy_all"] = [{"k": "seamark:type", "regv": "buoy*", "t": "node"}]
-#all_elements["wreck"] = [{"k": "seamark:type", "v": "wreck", "t": "node"}]
-#all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}]
-#all_elements["boom"] = [{"k": "seamark:type", "v": "obstruction", "t": "way"}, {"k": "seamark:obstruction:category", "v": "boom"}]
-#all_elements["fence"] = [{"k": "barrier", "v": "fence", "t": "way"}]
-#all_elements["borders"] = [{"k": "boundary", "v": "administrative", "t": "way"}]
-#all_elements["subarine_cable"] = [{"k": "seamark:type", "v": "cable_submarine", "t": "way"}]
-#all_elements["lake"] = [[{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "lake"}],[{"k": "natural", "v": "lake", "t": "area"}]] #or if water=lake not specified # <-- maybe add a dict around this to define multiple conditions for match.. then test if dict vs if list.. is this possible?
-#all_elements["estuary"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "cove"}, {"k": "estuary", "v": "yes"}]
-#all_elements["reservoir"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "reservoir"}]
-#all_elements["river"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "river"}]
-#all_elements["coral"] = [{"k": "subsea", "v": "coral", "t": "area"}]
-#all_elements["gate"] = [{"k": "seamark:type", "v": "gate", "t": ["node", "area"]}]
-    
-    
-    
-    
-    
-    
-    
-    
     
 def processOSMFiles(thefiles, verboose):
     if verboose:
@@ -304,9 +332,79 @@ def processOSMFiles(thefiles, verboose):
     sleep(3)
 
 
+def handle_node_beacon_cardinal(theobject):
+    None;
+    
+def handle_node_beacon_lateral(theobject):
+    None;
+    
+def handle_node_beacon_isolated_danger(theobject):
+    None;
+    
+def handle_node_beacon_safe_water(theobject):
+    None;
+    
+def handle_node_beacon_special_purpose(theobject):
+    None;
+    
 
+def handle_node_buoy_cardinal(theobject):
+    None;
+    
+def handle_node_buoy_lateral(theobject):
+    None;
+    
+def handle_node_buoy_isolated_danger(theobject):
+    None;
+    
+def handle_node_buoy_mooring(theobject):
+    None;
+    
+def handle_node_buoy_safe_water(theobject):
+    None;
+    
+def handle_node_buoy_special_purpose(theobject):
+    None;
+    
 
+def handle_node_gate(theobject):
+    None;
+    
+def handle_node_rock(theobject):
+    None;
+    
+def handle_node_wreck(theobject):
+    None;
+    
 
+def handle_way_boom(theobject):
+    None;
+    
+def handle_way_fence(theobject):
+    None;
+    
+def handle_way_borders(theobject):
+    None;
+    
+def handle_way_submarine_cable(theobject):
+    None;
+    
+
+def handle_area_lake(theobject):
+    None;
+    
+def handle_area_estuary(theobject):
+    None;
+    
+def handle_area_reservoir(theobject):
+    None;
+    
+def handle_area_river(theobject):
+    None;
+    
+def handle_area_coral(theobject):
+    None;
+    
 
 #processing rules
 def handleWrecks(thepoint, w):
