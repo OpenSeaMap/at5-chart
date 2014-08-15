@@ -344,16 +344,22 @@ def processOSMFiles(thefiles, verboose):
         
     datetimestamp = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
     if len(w._shapes) > 0:
+        if (verboose):
+            pprint("- Saving 'nodes' shapefile...");
         w.save("osm2inc_" + datetimestamp + "_combined_nodes.osm")
     else:
         if (verboose):
             pprint("Warning! No nodes detected! Not generating 'node' shapefile");
     if len(x._shapes) > 0:
+        if (verboose):
+            pprint("- Saving 'ways' shapefile...");
         x.save("osm2inc_" + datetimestamp + "_combined_ways.osm")
     else:
         if (verboose):
             pprint("Warning! No ways detected! Not generating 'ways' shapefile");
     if len(y._shapes) > 0:
+        if (verboose):
+            pprint("- Saving 'areas' shapefile...");
         y.save("osm2inc_" + datetimestamp + "_combined_areas.osm")
     else:
         if (verboose):
