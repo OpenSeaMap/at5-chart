@@ -5,21 +5,26 @@ import datetime
 from time import sleep
 import socket
 import os
+import xml.etree.ElementTree as xmlTree
+
+all_elements_nice = collections.OrderedDict()
 
 all_elements = collections.OrderedDict()
-#all_elements["beacon_cardinal"] = [{"k": "seamark:type", "v": "beacon_cardinal", "t": "node"}]
-#all_elements["beacon_lateral"] = [{"k": "seamark:type", "v": "beacon_lateral", "t": "node"}]
-#all_elements["beacon_isolated_danger"] = [{"k": "seamark:type", "v": "beacon_isolated_danger", "t": "node"}]
-#all_elements["beacon_safe_water"] = [{"k": "seamark:type", "v": "beacon_safe_water", "t": "node"}]
-#all_elements["beacon_special_purpose"] = [{"k": "seamark:type", "v": "beacon_special_purpose", "t": "node"}]
-all_elements["beacon_all"] = [{"k": "seamark:type", "regv": "beacon*", "t": "node"}]
+#Each entry contains a list of dicts. Each dict will contain k/v pairs. The first dict will also specify the type of object it is, or a list of objects it is. If the list of dicts is contained with another list, 2 different ways of tagging an object are checked.
+all_elements["beacon_cardinal"] = [{"k": "seamark:type", "v": "beacon_cardinal", "t": "node"}]
+all_elements["beacon_lateral"] = [{"k": "seamark:type", "v": "beacon_lateral", "t": "node"}]
+all_elements["beacon_isolated_danger"] = [{"k": "seamark:type", "v": "beacon_isolated_danger", "t": "node"}]
+all_elements["beacon_safe_water"] = [{"k": "seamark:type", "v": "beacon_safe_water", "t": "node"}]
+all_elements["beacon_special_purpose"] = [{"k": "seamark:type", "v": "beacon_special_purpose", "t": "node"}]
+#all_elements["beacon_all"] = [{"k": "seamark:type", "regv": "beacon*", "t": "node"}]
 
-#all_elements["buoy_cardinal"] = [{"k": "seamark:type", "v": "buoy_cardinal", "t": "node"}]
-#all_elements["buoy_lateral"] = [{"k": "seamark:type", "v": "buoy_lateral", "t": "node"}]
-#all_elements["buoy_isolated_danger"] = [{"k": "seamark:type", "v": "buoy_isolated_danger", "t": "node"}]
-#all_elements["buoy_safe_water"] = [{"k": "seamark:type", "v": "buoy_safe_water", "t": "node"}]
-#all_elements["buoy_special_purpose"] = [{"k": "seamark:type", "v": "buoy_special_purpose", "t": "node"}]
-all_elements["buoy_all"] = [{"k": "seamark:type", "regv": "buoy*", "t": "node"}]
+all_elements["buoy_cardinal"] = [{"k": "seamark:type", "v": "buoy_cardinal", "t": "node"}]
+all_elements["buoy_lateral"] = [{"k": "seamark:type", "v": "buoy_lateral", "t": "node"}]
+all_elements["buoy_isolated_danger"] = [{"k": "seamark:type", "v": "buoy_isolated_danger", "t": "node"}]
+all_elements["buoy_safe_water"] = [{"k": "seamark:type", "v": "buoy_safe_water", "t": "node"}]
+all_elements["buoy_special_purpose"] = [{"k": "seamark:type", "v": "buoy_special_purpose", "t": "node"}]
+#all_elements["buoy_all"] = [{"k": "seamark:type", "regv": "buoy*", "t": "node"}]
+all_elements["buoy_mooring"] = [{"k": "seamark:type", "v": "mooring", "t": "node"}, {"k": "seamark:mooring:category", "v": "buoy"}]
 
 all_elements["wreck"] = [{"k": "seamark:type", "v": "wreck", "t": "node"}]
 all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}]
@@ -28,8 +33,7 @@ all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}]
 all_elements["boom"] = [{"k": "seamark:type", "v": "obstruction", "t": "way"}, {"k": "seamark:obstruction:category", "v": "boom"}]
 all_elements["fence"] = [{"k": "barrier", "v": "fence", "t": "way"}]
 all_elements["borders"] = [{"k": "boundary", "v": "administrative", "t": "way"}]
-all_elements["borders"] = [{"k": "boundary", "v": "administrative", "t": "way"}]
-all_elements["subarine_cable"] = [{"k": "seamark:type", "v": "cable_submarine", "t": "way"}]
+all_elements["submarine_cable"] = [{"k": "seamark:type", "v": "cable_submarine", "t": "way"}]
 
 
 all_elements["lake"] = [[{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "lake"}],[{"k": "natural", "v": "lake", "t": "area"}]] #or if water=lake not specified # <-- maybe add a dict around this to define multiple conditions for match.. then test if dict vs if list.. is this possible?
@@ -42,7 +46,11 @@ all_elements["coral"] = [{"k": "subsea", "v": "coral", "t": "area"}]
 all_elements["gate"] = [{"k": "seamark:type", "v": "gate", "t": ["node", "area"]}]
 #natural=reef(area/node) rock(area/nodes)
 #marine_farm (area)
+#restricted areas
 
+
+
+node_array = collections.OrderedDict();
 
 def printElementsByKey(fullprint = False):
     if fullprint:
@@ -166,8 +174,106 @@ def getOSMFilesInDir(dir = "./"):
             filelist.append(file)
     return filelist
     
-def processOSMFiles(thefiles):
-    pprint(thefiles)
+def processOSMFile(file, verboose):
+    xml = xmlTree.parse(file)
+    root = xml.getroot()
+    
+    for entry in root:
+        if (entry.tag == "node"):
+            node_array[entry.attrib['id']] = {"lat": entry.attrib['lat'], "lon": entry.attrib['lon']}
+            if (entry.find("tag") != None):
+                thenode = collections.OrderedDict()
+                for tag in entry.findall("tag"):
+                    thenode[tag.attrib['k']] = tag.attrib['v']
+                    
+                for thekey, ele in all_elements_nice.items():
+                    if type(ele) is dict or type(ele) is collections.OrderedDict:
+                        shared_items = set(ele.items()) & set(thenode.items())
+                        if len(shared_items) == len(ele):
+                            print("WE FOUND ONE! " + thekey);
+                            None;
+                    elif type(ele) is list:
+                        for altele in ele:
+                            shared_items = set(altele.items()) & set(thenode.items())
+                            if len(shared_items) == len(altele):
+                                print("TODO: Check that this works.")
+                                print("WE FOUND ONE MULTI! " + thekey);
+                    
+                #pprint (thenode);
+                
+                
+            
+        elif (entry.tag == "way"):
+            None;
+            #if (verboose):
+            #    print("way or area");
+    #node_array
+    
+def buildAllElementsNice():
+    for thekey, ele in all_elements.items():
+        thefinalele = collections.OrderedDict()
+        #print(ele);
+        if type(ele[0]) is dict:
+            for kvpair in ele:
+                thefinalele.update({kvpair['k']: kvpair['v']});
+            all_elements_nice.update({thekey: thefinalele});
+        elif type(ele[0]) is list:
+            thesemifinalele = []
+            for alternate in ele:
+                thequarterfinalele = collections.OrderedDict()
+                for kvpair in alternate:
+                    thequarterfinalele.update({kvpair['k']: kvpair['v']});
+                thesemifinalele.append(thequarterfinalele);
+            all_elements_nice.update({thekey: thesemifinalele});
+    
+    
+    
+##all_elements["beacon_cardinal"] = [{"k": "seamark:type", "v": "beacon_cardinal", "t": "node"}]
+##all_elements["beacon_lateral"] = [{"k": "seamark:type", "v": "beacon_lateral", "t": "node"}]
+##all_elements["beacon_isolated_danger"] = [{"k": "seamark:type", "v": "beacon_isolated_danger", "t": "node"}]
+##all_elements["beacon_safe_water"] = [{"k": "seamark:type", "v": "beacon_safe_water", "t": "node"}]
+##all_elements["beacon_special_purpose"] = [{"k": "seamark:type", "v": "beacon_special_purpose", "t": "node"}]
+#all_elements["beacon_all"] = [{"k": "seamark:type", "regv": "beacon*", "t": "node"}]
+##all_elements["buoy_cardinal"] = [{"k": "seamark:type", "v": "buoy_cardinal", "t": "node"}]
+##all_elements["buoy_lateral"] = [{"k": "seamark:type", "v": "buoy_lateral", "t": "node"}]
+##all_elements["buoy_isolated_danger"] = [{"k": "seamark:type", "v": "buoy_isolated_danger", "t": "node"}]
+##all_elements["buoy_safe_water"] = [{"k": "seamark:type", "v": "buoy_safe_water", "t": "node"}]
+##all_elements["buoy_special_purpose"] = [{"k": "seamark:type", "v": "buoy_special_purpose", "t": "node"}]
+#all_elements["buoy_mooring"] = [{"k": "seamark:type", "v": "mooring", "t": "node"}, {"k": "seamark:mooring:category", "v": "buoy"}]
+#all_elements["buoy_all"] = [{"k": "seamark:type", "regv": "buoy*", "t": "node"}]
+#all_elements["wreck"] = [{"k": "seamark:type", "v": "wreck", "t": "node"}]
+#all_elements["rock"] = [{"k": "seamark:type", "v": "rock", "t": "node"}]
+#all_elements["boom"] = [{"k": "seamark:type", "v": "obstruction", "t": "way"}, {"k": "seamark:obstruction:category", "v": "boom"}]
+#all_elements["fence"] = [{"k": "barrier", "v": "fence", "t": "way"}]
+#all_elements["borders"] = [{"k": "boundary", "v": "administrative", "t": "way"}]
+#all_elements["subarine_cable"] = [{"k": "seamark:type", "v": "cable_submarine", "t": "way"}]
+#all_elements["lake"] = [[{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "lake"}],[{"k": "natural", "v": "lake", "t": "area"}]] #or if water=lake not specified # <-- maybe add a dict around this to define multiple conditions for match.. then test if dict vs if list.. is this possible?
+#all_elements["estuary"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "cove"}, {"k": "estuary", "v": "yes"}]
+#all_elements["reservoir"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "reservoir"}]
+#all_elements["river"] = [{"k": "natural", "v": "water", "t": "area"}, {"k": "water", "v": "river"}]
+#all_elements["coral"] = [{"k": "subsea", "v": "coral", "t": "area"}]
+#all_elements["gate"] = [{"k": "seamark:type", "v": "gate", "t": ["node", "area"]}]
+    
+    
+    
+    
+    
+    
+    
+    
+    
+def processOSMFiles(thefiles, verboose):
+    if verboose:
+        print ("- Processing files...")
+    buildAllElementsNice();
+    #pprint(all_elements_nice);
+    for i, file in enumerate(thefiles):
+        if verboose:
+            print ("-- Processing " + file + " (file " + str(i+1) + " of " + str(len(thefiles)) + ")")
+        processOSMFile(file, verboose);
+        
+    #pprint(node_array);
+    #pprint(thefiles)
     sleep(3)
 
 

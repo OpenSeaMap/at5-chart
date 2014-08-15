@@ -15,12 +15,16 @@ def handleArgs(args):
     osmfiles = []
     if type(args.local) is list:
         if len(args.local) > 0:
+            if args.verboose:
+                print ("Local files option detected. Will process local files as specified.")
             for eachfile in args.local:
                 if os.path.isdir(eachfile.strip('"\'').rstrip("\\")):
                     osmfiles.extend(getOSMFilesInDir(eachfile.strip('"\'').rstrip("\\")))
                 else:
                     osmfiles.append(eachfile);
         else:
+            if args.verboose:
+                print ("Local files option detected. Will process local files in current directory.")
             osmfiles.extend(getOSMFilesInDir())
     else:
         if len(args.elements) > 0:
@@ -36,7 +40,7 @@ def handleArgs(args):
     if args.download:
         return (None)
     else:
-        processOSMFiles(osmfiles)
+        processOSMFiles(osmfiles, args.verboose)
     #
     #print(args.elements)
     ##print(args)
